@@ -34,6 +34,10 @@ public:
 
 	static LRESULT CALLBACK KbdProc(int code, WPARAM wParam, LPARAM lParam);
 
+	void modifyHpCode();
+	void modifyBombCode();
+	void modifyPowerCode();
+
 
 public:
 	HHOOK m_hook;

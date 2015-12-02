@@ -7,6 +7,9 @@
 #include "TH14CheatDlg.h"
 #include "afxdialogex.h"
 
+// 定义则使用修改代码实现，否则使用每秒写内存实现
+#define MODIFY_CODE
+
 #pragma region 不用管
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -125,12 +128,21 @@ LRESULT CALLBACK CTH14CheatDlg::KbdProc(int code, WPARAM wParam, LPARAM lParam)
 		{
 		case VK_F1: // 无限残机
 			dlg->m_lockHp = !dlg->m_lockHp;
+#ifdef MODIFY_CODE
+			dlg->modifyHpCode();
+#endif
 			return 1;
 		case VK_F2: // 无限炸弹
 			dlg->m_lockBomb = !dlg->m_lockBomb;
+#ifdef MODIFY_CODE
+			dlg->modifyBombCode();
+#endif
 			return 1;
 		case VK_F3: // 满灵力
 			dlg->m_lockPower = !dlg->m_lockPower;
+#ifdef MODIFY_CODE
+			dlg->modifyPowerCode();
+#endif
 			return 1;
 		}
 	}
@@ -164,9 +176,19 @@ void CTH14CheatDlg::OnTimer(UINT_PTR nIDEvent)
 				CString msg;
 				msg.Format(_T("打开进程失败，错误代码：%u"), GetLastError());
 				MessageBox(msg, NULL, MB_ICONERROR);
+				CDialogEx::OnTimer(nIDEvent);
+				return;
 			}
+
+#ifdef MODIFY_CODE
+			// 刚打开进程时修改代码
+			modifyHpCode();
+			modifyBombCode();
+			modifyPowerCode();
+#endif
 		}
 
+#ifndef MODIFY_CODE
 		// 写内存
 		DWORD buffer;
 		if (m_lockHp)
@@ -181,7 +203,53 @@ void CTH14CheatDlg::OnTimer(UINT_PTR nIDEvent)
 		{
 			WriteProcessMemory(m_process, (LPVOID)0x004F5858, &(buffer = 400), sizeof(DWORD), NULL);
 		}
+#endif
 	}
 
 	CDialogEx::OnTimer(nIDEvent);
 }
+
+// 修改关于残机的代码
+void CTH14CheatDlg::modifyHpCode()
+{
+	static const BYTE originalCode[] = { 0xA3, 0x64, 0x58, 0x4F, 0x00 };
+	static const BYTE modifiedCode[] = { 0x90, 0x90, 0x90, 0x90, 0x90 };
+	if (m_process != NULL)
+	{
+		WriteProcessMemory(m_process, (LPVOID)0x0044F618, m_lockHp ? modifiedCode : originalCode, sizeof(originalCode), NULL);
+	}
+}
+
+// 修改关于炸弹的代码
+void CTH14CheatDlg::modifyBombCode()
+{
+	static const BYTE originalCode1[] = { 0xA3, 0x70, 0x58, 0x4F, 0x00 };
+	static const BYTE modifiedCode1[] = { 0x90, 0x90, 0x90, 0x90, 0x90 };
+	static const BYTE originalCode2[] = { 0x7E, 0x0E };
+	static const BYTE modifiedCode2[] = { 0x90, 0x90 };
+	if (m_process != NULL)
+	{
+		WriteProcessMemory(m_process, (LPVOID)0x0041218A, m_lockBomb ? modifiedCode1 : originalCode1, sizeof(originalCode1), NULL);
+		WriteProcessMemory(m_process, (LPVOID)0x0044DD68, m_lockBomb ? modifiedCode2 : originalCode2, sizeof(originalCode2), NULL);
+	}
+}
+
+// 修改关于灵力的代码
+void CTH14CheatDlg::modifyPowerCode()
+{
+	static const BYTE originalCode1[] = { 0xA3, 0x58, 0x58, 0x4F, 0x00 };
+	static const BYTE modifiedCode1[] = { 0xB8, 0x90, 0x01, 0x00, 0x00 };
+	static const BYTE originalCode2[] = { 0x03, 0xC8, 0x3B, 0xCE, 0x0F, 0x4C, 0xCD };
+	static const BYTE modifiedCode2[] = { 0xB9, 0x90, 0x01, 0x00, 0x00, 0x90, 0x90 };
+	if (m_process != NULL)
+	{
+		WriteProcessMemory(m_process, (LPVOID)0x00435DAF, m_lockPower ? modifiedCode1 : originalCode1, sizeof(originalCode1), NULL);
+		WriteProcessMemory(m_process, (LPVOID)0x0044DDB8, m_lockPower ? modifiedCode2 : originalCode2, sizeof(originalCode2), NULL);
+		if (m_lockPower)
+		{
+			DWORD buffer;
+			WriteProcessMemory(m_process, (LPVOID)0x004F5858, &(buffer = 400), sizeof(DWORD), NULL);
+		}
+	}
+}
+
