@@ -7,9 +7,6 @@
 #include "TH14CheatDlg.h"
 #include "afxdialogex.h"
 
-// 定义则使用修改代码实现，否则使用每秒写内存实现
-#define MODIFY_CODE
-
 #pragma region 不用管
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -25,7 +22,7 @@ CTH14CheatDlg::CTH14CheatDlg(CWnd* pParent /*=NULL*/)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
-	m_lockHp = m_lockBomb = m_lockPower = FALSE;
+	m_lockHp = m_lockBomb = m_lockPower = m_invincible = m_mortalBlow = FALSE;
 	m_process = NULL;
 }
 
@@ -128,21 +125,28 @@ LRESULT CALLBACK CTH14CheatDlg::KbdProc(int code, WPARAM wParam, LPARAM lParam)
 		{
 		case VK_F1: // 无限残机
 			dlg->m_lockHp = !dlg->m_lockHp;
-#ifdef MODIFY_CODE
 			dlg->modifyHpCode();
-#endif
+			Beep(dlg->m_lockHp ? 1000 : 500, 100);
 			return 1;
 		case VK_F2: // 无限炸弹
 			dlg->m_lockBomb = !dlg->m_lockBomb;
-#ifdef MODIFY_CODE
 			dlg->modifyBombCode();
-#endif
+			Beep(dlg->m_lockBomb ? 1000 : 500, 100);
 			return 1;
 		case VK_F3: // 满灵力
 			dlg->m_lockPower = !dlg->m_lockPower;
-#ifdef MODIFY_CODE
 			dlg->modifyPowerCode();
-#endif
+			Beep(dlg->m_lockPower ? 1000 : 500, 100);
+			return 1;
+		case VK_F4: // 无敌
+			dlg->m_invincible = !dlg->m_invincible;
+			dlg->modifyInvincibleCode();
+			Beep(dlg->m_invincible ? 1000 : 500, 100);
+			return 1;
+		case VK_F5: // 秒杀
+			dlg->m_mortalBlow = !dlg->m_mortalBlow;
+			dlg->modifyMortalBlowCode();
+			Beep(dlg->m_mortalBlow ? 1000 : 500, 100);
 			return 1;
 		}
 	}
@@ -180,30 +184,13 @@ void CTH14CheatDlg::OnTimer(UINT_PTR nIDEvent)
 				return;
 			}
 
-#ifdef MODIFY_CODE
 			// 刚打开进程时修改代码
 			modifyHpCode();
 			modifyBombCode();
 			modifyPowerCode();
-#endif
+			modifyInvincibleCode();
+			modifyMortalBlowCode();
 		}
-
-#ifndef MODIFY_CODE
-		// 写内存
-		DWORD buffer;
-		if (m_lockHp)
-		{
-			WriteProcessMemory(m_process, (LPVOID)0x004F5864, &(buffer = 8), sizeof(DWORD), NULL);
-		}
-		if (m_lockBomb)
-		{
-			WriteProcessMemory(m_process, (LPVOID)0x004F5870, &(buffer = 8), sizeof(DWORD), NULL);
-		}
-		if (m_lockPower)
-		{
-			WriteProcessMemory(m_process, (LPVOID)0x004F5858, &(buffer = 400), sizeof(DWORD), NULL);
-		}
-#endif
 	}
 
 	CDialogEx::OnTimer(nIDEvent);
@@ -248,8 +235,34 @@ void CTH14CheatDlg::modifyPowerCode()
 		if (m_lockPower)
 		{
 			DWORD buffer;
-			WriteProcessMemory(m_process, (LPVOID)0x004F5858, &(buffer = 400), sizeof(DWORD), NULL);
+			// 直接写入400会有小BUG，改成写399了
+			WriteProcessMemory(m_process, (LPVOID)0x004F5858, &(buffer = 399), sizeof(DWORD), NULL);
 		}
+	}
+}
+
+// 修改关于无敌的代码
+void CTH14CheatDlg::modifyInvincibleCode()
+{
+	static const BYTE originalCode[] = { 0x7F };
+	static const BYTE modifiedCode[] = { 0xEB };
+	if (m_process != NULL)
+	{
+		WriteProcessMemory(m_process, (LPVOID)0x0044F094, m_invincible ? modifiedCode : originalCode, sizeof(originalCode), NULL);
+	}
+}
+
+// 修改关于秒杀的代码
+void CTH14CheatDlg::modifyMortalBlowCode()
+{
+	static const BYTE originalCode1[] = { 0x2B, 0xC1 };
+	static const BYTE modifiedCode1[] = { 0x31, 0xC0 };
+	static const BYTE originalCode2[] = { 0x03, 0xC6 };
+	static const BYTE modifiedCode2[] = { 0x31, 0xC0 };
+	if (m_process != NULL)
+	{
+		WriteProcessMemory(m_process, (LPVOID)0x004214C6, m_mortalBlow ? modifiedCode1 : originalCode1, sizeof(originalCode1), NULL);
+		WriteProcessMemory(m_process, (LPVOID)0x004214BA, m_mortalBlow ? modifiedCode2 : originalCode2, sizeof(originalCode2), NULL);
 	}
 }
 
