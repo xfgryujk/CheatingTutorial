@@ -244,11 +244,11 @@ void CTH14CheatDlg::modifyPowerCode()
 // 修改关于无敌的代码
 void CTH14CheatDlg::modifyInvincibleCode()
 {
-	static const BYTE originalCode[] = { 0x7F };
-	static const BYTE modifiedCode[] = { 0xEB };
+	static const BYTE originalCode[] = { 0x55 };
+	static const BYTE modifiedCode[] = { 0xC3 };
 	if (m_process != NULL)
 	{
-		WriteProcessMemory(m_process, (LPVOID)0x0044F094, m_invincible ? modifiedCode : originalCode, sizeof(originalCode), NULL);
+		WriteProcessMemory(m_process, (LPVOID)0x0044F7A0, m_invincible ? modifiedCode : originalCode, sizeof(originalCode), NULL);
 	}
 }
 
