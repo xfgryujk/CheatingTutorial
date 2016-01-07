@@ -32,7 +32,7 @@ BOOL EnablePrivilege(BOOL enable)
 }
 
 // 注入DLL，返回模块句柄（64位程序只能返回低32位）
-DWORD InjectDll(HANDLE process, LPCTSTR dllPath)
+HMODULE InjectDll(HANDLE process, LPCTSTR dllPath)
 {
 	DWORD dllPathSize = ((DWORD)_tcslen(dllPath) + 1) * sizeof(TCHAR);
 
@@ -56,7 +56,7 @@ DWORD InjectDll(HANDLE process, LPCTSTR dllPath)
 	if (remoteThread == NULL)
 	{
 		printf("创建远线程失败，错误代码：%u\n", GetLastError());
-		return 0;
+		return NULL;
 	}
 	// 等待远线程结束
 	WaitForSingleObject(remoteThread, INFINITE);
@@ -68,11 +68,11 @@ DWORD InjectDll(HANDLE process, LPCTSTR dllPath)
 	CloseHandle(remoteThread);
 	VirtualFreeEx(process, remoteMemory, dllPathSize, MEM_DECOMMIT);
 
-	return remoteModule;
+	return (HMODULE)remoteModule;
 }
 
-// 卸载DLL，只能用于32位程序（因为CreateRemoteThread不能传64位地址），对64位程序只能注入机器码然后远线程执行了吧...
-BOOL FreeRemoteDll(HANDLE process, DWORD remoteModule)
+// 卸载DLL
+BOOL FreeRemoteDll(HANDLE process, HMODULE remoteModule)
 {
 	// 创建远线程调用FreeLibrary
 	HANDLE remoteThread = CreateRemoteThread(process, NULL, 0, (LPTHREAD_START_ROUTINE)FreeLibrary, (LPVOID)remoteModule, 0, NULL);
@@ -84,13 +84,38 @@ BOOL FreeRemoteDll(HANDLE process, DWORD remoteModule)
 	// 等待远线程结束
 	WaitForSingleObject(remoteThread, INFINITE);
 	// 取返回值
-	BOOL result;
-	GetExitCodeThread(remoteThread, (LPDWORD)&result);
+	DWORD result;
+	GetExitCodeThread(remoteThread, &result);
 
 	// 释放
 	CloseHandle(remoteThread);
-	return result;
+	return result != 0;
 }
+
+#ifdef _WIN64
+#include <tlhelp32.h>
+HMODULE GetRemoteModuleHandle(DWORD pid, LPCTSTR moduleName)
+{
+	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+	MODULEENTRY32 moduleentry;
+	moduleentry.dwSize = sizeof(moduleentry);
+
+	BOOL flag = Module32First(snapshot, &moduleentry);
+	HMODULE handle = NULL;
+	do
+	{
+		if (_tcsicmp(moduleentry.szModule, moduleName) == 0)
+		{
+			handle = moduleentry.hModule;
+			break;
+		}
+		flag = Module32Next(snapshot, &moduleentry);
+	} while (flag);
+
+	CloseHandle(snapshot);
+	return handle;
+}
+#endif
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -98,7 +123,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	EnablePrivilege(TRUE);
 
 	// 打开进程
-	HWND hwnd = FindWindow(NULL, _T("ARPTest"));
+	HWND hwnd = FindWindow(NULL, _T("任务管理器"));
 	DWORD pid;
 	GetWindowThreadProcessId(hwnd, &pid);
 	HANDLE process = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
@@ -115,13 +140,18 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 	// 注入DLL
-	DWORD remoteModule = InjectDll(process, dllPath);
-	if (remoteModule == 0)
+	HMODULE remoteModule = InjectDll(process, dllPath);
+	if (remoteModule == NULL)
 	{
 		CloseHandle(process);
 		return 2;
 	}
-	printf("模块句柄：0x%X\n", remoteModule);
+#ifdef _WIN64
+	remoteModule = GetRemoteModuleHandle(pid, _T("RemoteThreadDll.dll"));
+	printf("模块句柄：0x%X%X\n", *((DWORD*)&remoteModule + 1), (DWORD)remoteModule);
+#else
+	printf("模块句柄：0x%X\n", (DWORD)remoteModule);
+#endif
 
 	// 暂停
 	printf("按回车卸载DLL\n");
