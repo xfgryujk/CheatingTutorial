@@ -95,7 +95,7 @@ HHOOK InjectDll(DWORD pid, LPCTSTR dllPath)
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	// 提升权限
+	// 提升权限（其实不提升也可以，以管理员身份运行就行）
 	EnablePrivilege(TRUE);
 
 	// 取PID
