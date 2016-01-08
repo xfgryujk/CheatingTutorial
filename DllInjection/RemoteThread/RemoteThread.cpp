@@ -100,7 +100,7 @@ HMODULE GetRemoteModuleHandle(DWORD pid, LPCTSTR moduleName)
 	MODULEENTRY32 moduleentry;
 	moduleentry.dwSize = sizeof(moduleentry);
 
-	BOOL flag = Module32First(snapshot, &moduleentry);
+	BOOL hasNext = Module32First(snapshot, &moduleentry);
 	HMODULE handle = NULL;
 	do
 	{
@@ -109,8 +109,8 @@ HMODULE GetRemoteModuleHandle(DWORD pid, LPCTSTR moduleName)
 			handle = moduleentry.hModule;
 			break;
 		}
-		flag = Module32Next(snapshot, &moduleentry);
-	} while (flag);
+		hasNext = Module32Next(snapshot, &moduleentry);
+	} while (hasNext);
 
 	CloseHandle(snapshot);
 	return handle;
@@ -148,9 +148,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 #ifdef _WIN64
 	remoteModule = GetRemoteModuleHandle(pid, _T("RemoteThreadDll.dll"));
-	printf("Ä£¿é¾ä±ú£º0x%X%X\n", *((DWORD*)&remoteModule + 1), (DWORD)remoteModule);
+	printf("Ä£¿é¾ä±ú£º0x%08X%08X\n", *((DWORD*)&remoteModule + 1), (DWORD)remoteModule);
 #else
-	printf("Ä£¿é¾ä±ú£º0x%X\n", (DWORD)remoteModule);
+	printf("Ä£¿é¾ä±ú£º0x%08X\n", (DWORD)remoteModule);
 #endif
 
 	// ÔÝÍ£
