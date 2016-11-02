@@ -93,6 +93,9 @@ int _tmain(int argc, _TCHAR* argv[])
 		return 1;
 	}
 
+	// ÌáÉıÈ¨ÏŞ
+	EnablePrivilege(TRUE);
+
 	InjectDll(argv[1], argv[2]);
 
 	return 0;

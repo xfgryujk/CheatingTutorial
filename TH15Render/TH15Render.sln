@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.21005.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Inject", "Inject\Inject.vcxproj", "{0F1524E2-ADA3-4598-BE5B-AB4C8C0BC967}"
+	ProjectSection(ProjectDependencies) = postProject
+		{A401B406-11D3-4F71-9E60-422A35B107BA} = {A401B406-11D3-4F71-9E60-422A35B107BA}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TH15Render", "TH15Render\TH15Render.vcxproj", "{A401B406-11D3-4F71-9E60-422A35B107BA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0F1524E2-ADA3-4598-BE5B-AB4C8C0BC967}.Debug|Win32.ActiveCfg = Debug|Win32
+		{0F1524E2-ADA3-4598-BE5B-AB4C8C0BC967}.Debug|Win32.Build.0 = Debug|Win32
+		{0F1524E2-ADA3-4598-BE5B-AB4C8C0BC967}.Release|Win32.ActiveCfg = Release|Win32
+		{0F1524E2-ADA3-4598-BE5B-AB4C8C0BC967}.Release|Win32.Build.0 = Release|Win32
+		{A401B406-11D3-4F71-9E60-422A35B107BA}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A401B406-11D3-4F71-9E60-422A35B107BA}.Debug|Win32.Build.0 = Debug|Win32
+		{A401B406-11D3-4F71-9E60-422A35B107BA}.Release|Win32.ActiveCfg = Release|Win32
+		{A401B406-11D3-4F71-9E60-422A35B107BA}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

@@ -11,7 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{21120489-2681-4FB7-A57F-5023F1659957}</ProjectGuid>
+    <ProjectGuid>{0F1524E2-ADA3-4598-BE5B-AB4C8C0BC967}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>Inject</RootNamespace>
   </PropertyGroup>
