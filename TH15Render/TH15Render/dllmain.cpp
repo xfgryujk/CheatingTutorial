@@ -44,6 +44,14 @@ struct THVertex
 	FLOAT    x, y, z;
 	D3DCOLOR specular, diffuse;
 	FLOAT    tu, tv;
+
+	void Set(FLOAT x_, FLOAT y_, FLOAT tu_, FLOAT tv_)
+	{
+		x = x_;
+		y = y_;
+		tu = tu_;
+		tv = tv_;
+	}
 };
 
 // 主窗口
@@ -55,6 +63,7 @@ const UINT WM_UPDATE_TEXTURE = WM_APP + 1;
 // 视频解码器
 CDecoder* g_decoder = NULL;
 SIZE g_videoSize;
+SIZE g_scaledSize;
 // 视频纹理
 IDirect3DTexture9* g_texture = NULL;
 BYTE* g_frameBuffer = NULL;
@@ -73,12 +82,13 @@ HRESULT STDMETHODCALLTYPE MyDrawPrimitiveUP(DWORD esp, IDirect3DDevice9* thiz, D
 		// 设置纹理坐标
 		static THVertex vertex[6];
 		memcpy(vertex, pVertexStreamZeroData, sizeof(vertex));
-		vertex[0].tu = 0; vertex[0].tv = 0; // 左上
-		vertex[1].tu = 1; vertex[1].tv = 0; // 右上
-		vertex[2].tu = 0; vertex[2].tv = 1; // 左下
-		vertex[3].tu = 1; vertex[3].tv = 0; // 右上
-		vertex[4].tu = 0; vertex[4].tv = 1; // 左下
-		vertex[5].tu = 1; vertex[5].tv = 1; // 右下
+		float x = (vertex[0].x + vertex[5].x) / 2, y = (vertex[0].y + vertex[5].y) / 2; // 中点
+		vertex[0].Set(x - g_scaledSize.cx / 2, y - g_scaledSize.cy / 2, 0, 0); // 左上
+		vertex[1].Set(x + g_scaledSize.cx / 2, y - g_scaledSize.cy / 2, 1, 0); // 右上
+		vertex[2].Set(x - g_scaledSize.cx / 2, y + g_scaledSize.cy / 2, 0, 1); // 左下
+		vertex[3].Set(x + g_scaledSize.cx / 2, y - g_scaledSize.cy / 2, 1, 0); // 右上
+		vertex[4].Set(x - g_scaledSize.cx / 2, y + g_scaledSize.cy / 2, 0, 1); // 左下
+		vertex[5].Set(x + g_scaledSize.cx / 2, y + g_scaledSize.cy / 2, 1, 1); // 右下
 
 		// 设置纹理
 		IDirect3DBaseTexture9* oldTexture = NULL;
@@ -125,7 +135,7 @@ LRESULT CALLBACK MyWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 		av_register_all();
 
 		// 创建解码器
-		g_decoder = new CDecoder("E:\\pump it.avi");
+		g_decoder = new CDecoder("E:\\Bad Apple.avi");
 		g_decoder->SetOnPresent(std::function<void(BYTE*)>(OnPresent));
 
 		// 创建纹理
@@ -134,6 +144,12 @@ LRESULT CALLBACK MyWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 		D3DDISPLAYMODE dm;
 		g_pDevice->GetDisplayMode(NULL, &dm);
 		g_pDevice->CreateTexture(g_videoSize.cx, g_videoSize.cy, 1, D3DUSAGE_DYNAMIC, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &g_texture, NULL);
+
+		float scale1 = 100.0f / g_videoSize.cx;
+		float scale2 = 100.0f / g_videoSize.cy;
+		float scale = scale1 < scale2 ? scale1 : scale2;
+		g_scaledSize.cx = LONG(g_videoSize.cx * scale1);
+		g_scaledSize.cy = LONG(g_videoSize.cy * scale1);
 
 		// 开始播放
 		g_decoder->Run();
