@@ -85,7 +85,7 @@ HHOOK InjectDll(DWORD pid, LPCTSTR dllPath)
 	}
 
 	// 安装钩子
-	HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, proc, module, threadID);
+	HHOOK hook = SetWindowsHookEx(WH_GETMESSAGE, proc, module, threadID);
 
 	// 释放
 	FreeLibrary(module);
