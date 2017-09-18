@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Inject", "Inject\Inject.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D3DHook", "D3DHook\D3DHook.vcxproj", "{B4A36D0D-951A-4FAA-913F-1336E455CF20}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D3DHookV2", "D3DHookV2\D3DHookV2.vcxproj", "{AEA7C9F1-2A98-45DB-9BF3-E06DA91D4EAD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -21,6 +23,10 @@ Global
 		{B4A36D0D-951A-4FAA-913F-1336E455CF20}.Debug|Win32.Build.0 = Debug|Win32
 		{B4A36D0D-951A-4FAA-913F-1336E455CF20}.Release|Win32.ActiveCfg = Release|Win32
 		{B4A36D0D-951A-4FAA-913F-1336E455CF20}.Release|Win32.Build.0 = Release|Win32
+		{AEA7C9F1-2A98-45DB-9BF3-E06DA91D4EAD}.Debug|Win32.ActiveCfg = Debug|Win32
+		{AEA7C9F1-2A98-45DB-9BF3-E06DA91D4EAD}.Debug|Win32.Build.0 = Debug|Win32
+		{AEA7C9F1-2A98-45DB-9BF3-E06DA91D4EAD}.Release|Win32.ActiveCfg = Release|Win32
+		{AEA7C9F1-2A98-45DB-9BF3-E06DA91D4EAD}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

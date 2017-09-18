@@ -3,13 +3,12 @@
 #include <d3dx9.h>
 
 
-
-DWORD* findImportAddress(HANDLE hookModule, LPCSTR moduleName, LPCSTR functionName)
+void** findImportAddress(HANDLE hookModule, LPCSTR moduleName, LPCSTR functionName)
 {
 	// 被hook的模块基址
-	DWORD hookModuleBase = (DWORD)hookModule;
+	uintptr_t hookModuleBase = (uintptr_t)hookModule;
 	PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)hookModuleBase;
-	PIMAGE_NT_HEADERS ntHeader = (PIMAGE_NT_HEADERS)((DWORD)dosHeader + dosHeader->e_lfanew);
+	PIMAGE_NT_HEADERS ntHeader = (PIMAGE_NT_HEADERS)(hookModuleBase + dosHeader->e_lfanew);
 	// 导入表
 	PIMAGE_IMPORT_DESCRIPTOR importTable = (PIMAGE_IMPORT_DESCRIPTOR)(hookModuleBase
 		+ ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
@@ -22,7 +21,7 @@ DWORD* findImportAddress(HANDLE hookModule, LPCSTR moduleName, LPCSTR functionNa
 			continue;
 
 		PIMAGE_THUNK_DATA info = (PIMAGE_THUNK_DATA)(hookModuleBase + importTable->OriginalFirstThunk);
-		DWORD* iat = (DWORD*)(hookModuleBase + importTable->FirstThunk);
+		void** iat = (void**)(hookModuleBase + importTable->FirstThunk);
 
 		// 遍历导入的函数
 		for (; info->u1.AddressOfData != 0; info++, iat++)
@@ -30,7 +29,7 @@ DWORD* findImportAddress(HANDLE hookModule, LPCSTR moduleName, LPCSTR functionNa
 			if ((info->u1.Ordinal & IMAGE_ORDINAL_FLAG) == 0) // 是用函数名导入的
 			{
 				PIMAGE_IMPORT_BY_NAME name = (PIMAGE_IMPORT_BY_NAME)(hookModuleBase + info->u1.AddressOfData);
-				if (strcmp(name->Name, functionName) == 0)
+				if (strcmp((LPCSTR)name->Name, functionName) == 0)
 					return iat;
 			}
 		}
@@ -41,20 +40,20 @@ DWORD* findImportAddress(HANDLE hookModule, LPCSTR moduleName, LPCSTR functionNa
 	return NULL; // 没找到要hook的模块
 }
 
-BOOL hookIAT(HANDLE hookModule, LPCSTR moduleName, LPCSTR functionName, void* hookFunction, void* oldAddress)
+BOOL hookIAT(HANDLE hookModule, LPCSTR moduleName, LPCSTR functionName, void* hookFunction, void** oldAddress)
 {
-	DWORD* address = findImportAddress(hookModule, moduleName, functionName);
+	void** address = findImportAddress(hookModule, moduleName, functionName);
 	if (address == NULL)
 		return FALSE;
 
 	// 保存原函数地址
 	if (oldAddress != NULL)
-		*(DWORD*)oldAddress = *address;
+		*oldAddress = *address;
 
 	// 修改IAT中地址为hookFunction
 	DWORD oldProtect, oldProtect2;
 	VirtualProtect(address, sizeof(DWORD), PAGE_READWRITE, &oldProtect);
-	*address = (DWORD)hookFunction;
+	*address = hookFunction;
 	VirtualProtect(address, sizeof(DWORD), oldProtect, &oldProtect2);
 
 	return TRUE;
@@ -71,20 +70,20 @@ BOOL unhookIAT(HANDLE hookModule, LPCSTR moduleName, LPCSTR functionName)
 	return hookIAT(hookModule, moduleName, functionName, oldAddress, NULL);
 }
 
-BOOL hookVTable(void* pInterface, int index, void* hookFunction, void* oldAddress)
+BOOL hookVTable(void* pInterface, int index, void* hookFunction, void** oldAddress)
 {
-	DWORD* address = &(*(DWORD**)pInterface)[index];
+	void** address = &(*(void***)pInterface)[index];
 	if (address == NULL)
 		return FALSE;
 
 	// 保存原函数地址
 	if (oldAddress != NULL)
-		*(DWORD*)oldAddress = *address;
+		*oldAddress = *address;
 
 	// 修改虚函数表中地址为hookFunction
 	DWORD oldProtect, oldProtect2;
 	VirtualProtect(address, sizeof(DWORD), PAGE_READWRITE, &oldProtect);
-	*address = (DWORD)hookFunction;
+	*address = hookFunction;
 	VirtualProtect(address, sizeof(DWORD), oldProtect, &oldProtect2);
 
 	return TRUE;
@@ -136,7 +135,7 @@ HRESULT STDMETHODCALLTYPE MyCreateDevice(IDirect3D9* thiz, UINT Adapter, D3DDEVT
 	static RECT rect = { 0, 0, 200, 200 };
 	g_font->DrawText(NULL, _T("Hello World"), -1, &rect, DT_TOP | DT_LEFT, D3DCOLOR_XRGB(255, 0, 0));
 
-	hookVTable(g_device, 42, MyEndScene, &RealEndScene); // EndScene是IDirect3DDevice9第43个函数
+	hookVTable(g_device, 42, MyEndScene, (void**)&RealEndScene); // EndScene是IDirect3DDevice9第43个函数
 
 	return res;
 }
@@ -145,7 +144,7 @@ IDirect3D9* WINAPI MyDirect3DCreate9(UINT SDKVersion)
 {
 	unhookIAT(GetModuleHandle(NULL), "d3d9.dll", "Direct3DCreate9");
 	g_d3d9 = RealDirect3DCreate9(SDKVersion);
-	hookVTable(g_d3d9, 16, MyCreateDevice, &RealCreateDevice); // CreateDevice是IDirect3D9第17个函数
+	hookVTable(g_d3d9, 16, MyCreateDevice, (void**)&RealCreateDevice); // CreateDevice是IDirect3D9第17个函数
 	return g_d3d9;
 }
 
@@ -158,7 +157,7 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 	switch (ul_reason_for_call)
 	{
 	case DLL_PROCESS_ATTACH:
-		hookIAT(GetModuleHandle(NULL), "d3d9.dll", "Direct3DCreate9", MyDirect3DCreate9, &RealDirect3DCreate9);
+		hookIAT(GetModuleHandle(NULL), "d3d9.dll", "Direct3DCreate9", MyDirect3DCreate9, (void**)&RealDirect3DCreate9);
 		break;
 
 	case DLL_PROCESS_DETACH:

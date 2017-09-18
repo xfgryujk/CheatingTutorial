@@ -32,17 +32,27 @@ BOOL EnablePrivilege(BOOL enable)
 }
 
 // 程序运行时注入DLL，返回模块句柄（64位程序只能返回低32位）
-HMODULE InjectDll(LPTSTR commandLine, LPCTSTR dllPath)
+HMODULE InjectDll(LPTSTR commandLine, LPCTSTR dllPath/*, DWORD* pid, HANDLE* process*/)
 {
+	TCHAR* commandLineCopy = new TCHAR[32768]; // CreateProcess可能修改这个
+	_tcscpy_s(commandLineCopy, 32768, commandLine);
 	int cdSize = _tcsrchr(commandLine, _T('\\')) - commandLine + 1;
 	TCHAR* cd = new TCHAR[cdSize];
 	_tcsnccpy_s(cd, cdSize, commandLine, cdSize - 1);
 	// 创建进程并暂停
 	STARTUPINFO startInfo = {};
 	PROCESS_INFORMATION processInfo = {};
-	if (!CreateProcess(NULL, commandLine, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, cd, &startInfo, &processInfo))
+	if (!CreateProcess(NULL, commandLineCopy, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, cd, &startInfo, &processInfo))
+	{
+		delete commandLineCopy;
+		delete cd;
 		return 0;
+	}
+	delete commandLineCopy;
 	delete cd;
+
+	/**pid = processInfo.dwProcessId;
+	*process = processInfo.hProcess;*/
 
 	DWORD dllPathSize = ((DWORD)_tcslen(dllPath) + 1) * sizeof(TCHAR);
 
