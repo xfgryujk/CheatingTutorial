@@ -5,20 +5,60 @@
 #include <mutex>
 
 
-BOOL hookVTable(void* pInterface, int index, void* hookFunction, void* oldAddress)
+#pragma pack(push)
+#pragma pack(1)
+struct JmpCode
 {
-	DWORD* address = &(*(DWORD**)pInterface)[index];
+private:
+	const BYTE jmp;
+	DWORD address;
+
+public:
+	JmpCode(DWORD srcAddr, DWORD dstAddr)
+		: jmp(0xE9)
+	{
+		setAddress(srcAddr, dstAddr);
+	}
+
+	void setAddress(DWORD srcAddr, DWORD dstAddr)
+	{
+		address = dstAddr - srcAddr - sizeof(JmpCode);
+	}
+};
+#pragma pack(pop)
+
+void hook(void* originalFunction, void* hookFunction, BYTE* oldCode)
+{
+	JmpCode code((uintptr_t)originalFunction, (uintptr_t)hookFunction);
+	DWORD oldProtect, oldProtect2;
+	VirtualProtect(originalFunction, sizeof(code), PAGE_EXECUTE_READWRITE, &oldProtect);
+	memcpy(oldCode, originalFunction, sizeof(code));
+	memcpy(originalFunction, &code, sizeof(code));
+	VirtualProtect(originalFunction, sizeof(code), oldProtect, &oldProtect2);
+}
+
+void unhook(void* originalFunction, BYTE* oldCode)
+{
+	DWORD oldProtect, oldProtect2;
+	VirtualProtect(originalFunction, sizeof(JmpCode), PAGE_EXECUTE_READWRITE, &oldProtect);
+	memcpy(originalFunction, oldCode, sizeof(JmpCode));
+	VirtualProtect(originalFunction, sizeof(JmpCode), oldProtect, &oldProtect2);
+}
+
+BOOL hookVTable(void* pInterface, int index, void* hookFunction, void** oldAddress)
+{
+	void** address = &(*(void***)pInterface)[index];
 	if (address == NULL)
 		return FALSE;
 
 	// 保存原函数地址
 	if (oldAddress != NULL)
-		*(DWORD*)oldAddress = *address;
+		*oldAddress = *address;
 
 	// 修改虚函数表中地址为hookFunction
 	DWORD oldProtect, oldProtect2;
 	VirtualProtect(address, sizeof(DWORD), PAGE_READWRITE, &oldProtect);
-	*address = (DWORD)hookFunction;
+	*address = hookFunction;
 	VirtualProtect(address, sizeof(DWORD), oldProtect, &oldProtect2);
 
 	return TRUE;
@@ -35,8 +75,13 @@ typedef HRESULT(STDMETHODCALLTYPE* DrawPrimitiveUPType)(IDirect3DDevice9* thiz, 
 DrawPrimitiveUPType RealDrawPrimitiveUP = NULL;
 
 // 通过调试得到的TH15中device指针地址
-IDirect3DDevice9** g_ppDevice = (IDirect3DDevice9**)0x4E77D8;
-IDirect3DDevice9* g_pDevice = *g_ppDevice;
+IDirect3DDevice9*& g_device = *(IDirect3DDevice9**)0x4E77D8;
+
+// 其实调用约定是__thiscall，不过用__fastcall也可以使第一个参数在ecx寄存器
+int(__fastcall* const RenderPlayer)(void*) = (int(__fastcall*)(void*))0x4872F0;
+BYTE renderPlayerOldCode[sizeof(JmpCode)];
+// 自从调用RenderPlayer这个函数后渲染了几次
+int g_renderCount = 999;
 
 // 东方用的顶点结构
 struct THVertex
@@ -54,12 +99,6 @@ struct THVertex
 	}
 };
 
-// 主窗口
-HWND g_mainWnd = NULL;
-WNDPROC g_realWndProc = NULL;
-const UINT WM_DLL_INIT = WM_APP;
-const UINT WM_UPDATE_TEXTURE = WM_APP + 1;
-
 // 视频解码器
 CDecoder* g_decoder = NULL;
 SIZE g_videoSize;
@@ -67,17 +106,44 @@ SIZE g_scaledSize;
 // 视频纹理
 IDirect3DTexture9* g_texture = NULL;
 BYTE* g_frameBuffer = NULL;
+bool g_textureNeedUpdate = FALSE;
 std::mutex g_frameBufferLock;
 
 
-HRESULT STDMETHODCALLTYPE MyDrawPrimitiveUP(DWORD esp, IDirect3DDevice9* thiz, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
+int __fastcall MyRenderPlayer(void* thiz)
 {
+	g_renderCount = 0;
+	unhook(RenderPlayer, renderPlayerOldCode);
+	int result = ((int(__fastcall*)(void*))0x4872F0)(thiz);
+	hook(RenderPlayer, MyRenderPlayer, renderPlayerOldCode);
+	return result;
+}
+
+HRESULT STDMETHODCALLTYPE MyDrawPrimitiveUP(IDirect3DDevice9* thiz, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
+{
+	if (g_texture == NULL)
+	{
+		// 初始化
+		g_device->CreateTexture(g_videoSize.cx, g_videoSize.cy, 1, D3DUSAGE_DYNAMIC, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &g_texture, NULL);
+	}
+
 	// 判断是不是在渲染自机
-	if (*(DWORD*)(esp + 0x9C) == 14			// 灵梦
-		|| *(DWORD*)(esp + 0x88) == 14		// 其他角色按住shift
-		)									// 其他情况我就不知道怎么判断了...
+	if (++g_renderCount == 1)
 	{
 		// 自己的渲染
+
+		// 更新纹理
+		if (g_textureNeedUpdate)
+		{
+			D3DLOCKED_RECT rect;
+			g_texture->LockRect(0, &rect, NULL, 0);
+			g_frameBufferLock.lock();
+			for (int y = 0; y < g_videoSize.cy; y++)
+				memcpy((BYTE*)rect.pBits + y * rect.Pitch, g_frameBuffer + y * g_videoSize.cx * 4, g_videoSize.cx * 4);
+			g_textureNeedUpdate = false;
+			g_frameBufferLock.unlock();
+			g_texture->UnlockRect(0);
+		}
 
 		// 设置纹理坐标
 		static THVertex vertex[6];
@@ -102,77 +168,48 @@ HRESULT STDMETHODCALLTYPE MyDrawPrimitiveUP(DWORD esp, IDirect3DDevice9* thiz, D
 		thiz->SetTexture(0, oldTexture);
 		return hr;
 	}
+
 	return RealDrawPrimitiveUP(thiz, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 }
-
-__declspec(naked) // 不让编译器自动加代码破坏栈
-HRESULT STDMETHODCALLTYPE MyDrawPrimitiveUPWrapper(IDirect3DDevice9* thiz, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
-{
-	__asm
-	{
-		pop ecx  // 返回地址出栈
-		push esp // 此时[esp] = thiz
-		push ecx // 恢复返回地址
-		jmp MyDrawPrimitiveUP
-	}
-}
-
 
 // 把解码出来的RGB数据拷贝到g_frameBuffer
 void OnPresent(BYTE* data)
 {
 	g_frameBufferLock.lock();
 	memcpy(g_frameBuffer, data, g_videoSize.cx * g_videoSize.cy * 4);
+	g_textureNeedUpdate = true;
 	g_frameBufferLock.unlock();
-	PostMessage(g_mainWnd, WM_UPDATE_TEXTURE, 0, 0);
 }
 
-LRESULT CALLBACK MyWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+DWORD WINAPI initThread(LPVOID)
 {
-	if (Msg == WM_DLL_INIT) // 在主线程的初始化
-	{
-		// 初始化FFmpeg解码器
-		av_register_all();
+	// 初始化FFmpeg解码器
+	av_register_all();
 
-		// 创建解码器
-		g_decoder = new CDecoder("E:\\Bad Apple.avi");
-		g_decoder->SetOnPresent(std::function<void(BYTE*)>(OnPresent));
+	// 创建解码器
+	g_decoder = new CDecoder("E:\\Bad Apple.avi");
+	g_decoder->SetOnPresent(std::function<void(BYTE*)>(OnPresent));
 
-		// 创建纹理
-		g_decoder->GetVideoSize(g_videoSize);
-		g_frameBuffer = new BYTE[g_videoSize.cx * g_videoSize.cy * 4];
-		D3DDISPLAYMODE dm;
-		g_pDevice->GetDisplayMode(NULL, &dm);
-		g_pDevice->CreateTexture(g_videoSize.cx, g_videoSize.cy, 1, D3DUSAGE_DYNAMIC, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &g_texture, NULL);
+	// 创建纹理数据缓冲
+	g_decoder->GetVideoSize(g_videoSize);
+	g_frameBuffer = new BYTE[g_videoSize.cx * g_videoSize.cy * 4];
 
-		float scale1 = 100.0f / g_videoSize.cx;
-		float scale2 = 100.0f / g_videoSize.cy;
-		float scale = scale1 < scale2 ? scale1 : scale2;
-		g_scaledSize.cx = LONG(g_videoSize.cx * scale1);
-		g_scaledSize.cy = LONG(g_videoSize.cy * scale1);
+	float scale1 = 100.0f / g_videoSize.cx;
+	float scale2 = 100.0f / g_videoSize.cy;
+	float scale = scale1 < scale2 ? scale1 : scale2;
+	g_scaledSize.cx = LONG(g_videoSize.cx * scale1);
+	g_scaledSize.cy = LONG(g_videoSize.cy * scale1);
 
-		// 开始播放
-		g_decoder->Run();
+	// 开始播放
+	g_decoder->Run();
 
-		// hook D3D渲染
-		hookVTable(g_pDevice, 83, MyDrawPrimitiveUPWrapper, &RealDrawPrimitiveUP);
-		return 0;
-	}
-	else if (Msg == WM_UPDATE_TEXTURE) // 更新纹理
-	{
-		// D3D9不是线程安全的，这里利用了处理消息时不会渲染
-		D3DLOCKED_RECT rect;
-		g_texture->LockRect(0, &rect, NULL, 0);
-		g_frameBufferLock.lock();
-		for (int y = 0; y < g_videoSize.cy; y++)
-			memcpy((BYTE*)rect.pBits + y * rect.Pitch, g_frameBuffer + y * g_videoSize.cx * 4, g_videoSize.cx * 4);
-		g_frameBufferLock.unlock();
-		g_texture->UnlockRect(0);
-		return 0;
-	}
+	// hook
+	hookVTable(g_device, 83, MyDrawPrimitiveUP, (void**)&RealDrawPrimitiveUP);
+	hook(RenderPlayer, MyRenderPlayer, renderPlayerOldCode);
 
-	return CallWindowProc(g_realWndProc, hWnd, Msg, wParam, lParam);
+	return 0;
 }
+
 
 BOOL APIENTRY DllMain( HMODULE hModule,
                        DWORD  ul_reason_for_call,
@@ -182,22 +219,15 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 	switch (ul_reason_for_call)
 	{
 	case DLL_PROCESS_ATTACH:
-		// 子类化窗口，拦截窗口消息
-		g_mainWnd = FindWindow(_T("BASE"), _T("搶曽嵁庫揱丂乣 Legacy of Lunatic Kingdom. ver 1.00b")); // 日文编码就是这样...
-		g_realWndProc = (WNDPROC)SetWindowLongPtr(g_mainWnd, GWLP_WNDPROC, (ULONG_PTR)MyWndProc);
-
-		// 接下来的初始化在主线程完成
-		PostMessage(g_mainWnd, WM_DLL_INIT, 0, 0);
+		// 在另一个线程初始化，避免死锁
+		CloseHandle(CreateThread(NULL, 0, initThread, NULL, 0, NULL));
 		break;
 
 	case DLL_PROCESS_DETACH:
-		// 恢复D3D hook
-		if (*g_ppDevice != NULL && RealDrawPrimitiveUP != NULL)
-			unhookVTable(g_pDevice, 83, RealDrawPrimitiveUP);
-
-		// 恢复窗口过程
-		if (IsWindow(g_mainWnd))
-			SetWindowLongPtr(g_mainWnd, GWLP_WNDPROC, (ULONG_PTR)g_realWndProc);
+		// 恢复hook
+		unhook(RenderPlayer, renderPlayerOldCode);
+		if (g_device != NULL && RealDrawPrimitiveUP != NULL)
+			unhookVTable(g_device, 83, RealDrawPrimitiveUP);
 
 		// 释放
 		if (g_decoder != NULL)
@@ -206,6 +236,7 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 			g_texture->Release();
 		if (g_frameBuffer != NULL)
 			delete g_frameBuffer;
+
 		break;
 
 	case DLL_THREAD_ATTACH:
