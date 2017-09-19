@@ -162,7 +162,7 @@ HRESULT STDMETHODCALLTYPE MyDrawPrimitiveUP(IDirect3DDevice9* thiz, D3DPRIMITIVE
 		thiz->SetTexture(0, g_texture);
 
 		// äÖÈ¾
-		HRESULT hr = RealDrawPrimitiveUP(thiz, PrimitiveType, PrimitiveCount, vertex, VertexStreamZeroStride);
+		HRESULT hr = RealDrawPrimitiveUP(thiz, D3DPT_TRIANGLELIST, 2, vertex, VertexStreamZeroStride);
 
 		// »Ö¸´
 		thiz->SetTexture(0, oldTexture);
@@ -197,8 +197,8 @@ DWORD WINAPI initThread(LPVOID)
 	float scale1 = 100.0f / g_videoSize.cx;
 	float scale2 = 100.0f / g_videoSize.cy;
 	float scale = scale1 < scale2 ? scale1 : scale2;
-	g_scaledSize.cx = LONG(g_videoSize.cx * scale1);
-	g_scaledSize.cy = LONG(g_videoSize.cy * scale1);
+	g_scaledSize.cx = LONG(g_videoSize.cx * scale);
+	g_scaledSize.cy = LONG(g_videoSize.cy * scale);
 
 	// ¿ªÊ¼²¥·Å
 	g_decoder->Run();
