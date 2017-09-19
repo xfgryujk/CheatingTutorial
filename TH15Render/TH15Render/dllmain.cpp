@@ -114,7 +114,7 @@ int __fastcall MyRenderPlayer(void* thiz)
 {
 	g_renderCount = 0;
 	unhook(RenderPlayer, renderPlayerOldCode);
-	int result = ((int(__fastcall*)(void*))0x4872F0)(thiz);
+	int result = RenderPlayer(thiz);
 	hook(RenderPlayer, MyRenderPlayer, renderPlayerOldCode);
 	return result;
 }
